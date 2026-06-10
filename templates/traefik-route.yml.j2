@@ -1,0 +1,13 @@
+http:
+  routers:
+    {{ service }}:
+      rule: "Host(`{{ hostname }}`)"
+      service: {{ service }}
+      entryPoints:
+        - web
+
+  services:
+    {{ service }}:
+      loadBalancer:
+        servers:
+          - url: "{{ backend_url }}"

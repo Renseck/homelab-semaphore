@@ -1,0 +1,76 @@
+---
+- name: Register app on Traefik + Pi-hole
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    traefik_config_dir: /traefik-config   # the bind mount from Phase A1
+    # Per-run (Semaphore Survey vars):  service, hostname, backend_url
+    # Fixed (Semaphore Environment):    traefik_ip, pihole_url, pihole_password
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - service     is defined and service     | length > 0
+          - hostname    is defined and hostname    | length > 0
+          - backend_url is defined and backend_url | length > 0
+          - traefik_ip  is defined and traefik_ip  | length > 0
+          - pihole_url      is defined
+          - pihole_password is defined
+        fail_msg: "Missing required variable(s)."
+
+    # --- Traefik ---
+    - name: Write Traefik dynamic route file
+      ansible.builtin.template:
+        src: templates/traefik-route.yml.j2
+        dest: "{{ traefik_config_dir }}/{{ service }}.yml"
+        mode: "0644"
+      # Traefik's file provider is watching this dir → auto-reloads. No restart needed.
+
+    # --- Pi-hole v6 ---
+    - name: Authenticate to Pi-hole
+      ansible.builtin.uri:
+        url: "{{ pihole_url }}/api/auth"
+        method: POST
+        body_format: json
+        body:
+          password: "{{ pihole_password }}"
+        validate_certs: false
+        status_code: 200
+      register: pihole_auth
+      no_log: true
+
+    - name: Capture session id
+      ansible.builtin.set_fact:
+        pihole_sid: "{{ pihole_auth.json.session.sid }}"
+
+    - name: Read current local DNS records
+      ansible.builtin.uri:
+        url: "{{ pihole_url }}/api/config/dns/hosts"
+        method: GET
+        headers:
+          X-FTL-SID: "{{ pihole_sid }}"   # <-- verify this header name (see Phase D)
+        validate_certs: false
+      register: pihole_hosts
+
+    - name: Add local DNS record (idempotent)
+      ansible.builtin.uri:
+        url: "{{ pihole_url }}/api/config/dns/hosts/{{ (traefik_ip ~ ' ' ~ hostname) | urlencode }}"
+        method: PUT
+        headers:
+          X-FTL-SID: "{{ pihole_sid }}"
+        validate_certs: false
+        status_code: [200, 201]
+      when: (traefik_ip ~ ' ' ~ hostname) not in (pihole_hosts.json.config.dns.hosts | default([]))
+
+    - name: Log out of Pi-hole session
+      ansible.builtin.uri:
+        url: "{{ pihole_url }}/api/auth"
+        method: DELETE
+        headers:
+          X-FTL-SID: "{{ pihole_sid }}"
+        validate_certs: false
+        status_code: [200, 204]
+      no_log: true
