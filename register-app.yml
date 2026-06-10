@@ -6,6 +6,7 @@
 
   vars:
     traefik_config_dir: /traefik-config   # the bind mount from Phase A1
+    pihole_password: "{{ lookup('env', 'pihole_password') }}"
     # Per-run (Semaphore Survey vars):  service, hostname, backend_url
     # Fixed (Semaphore Environment):    traefik_ip, pihole_url, pihole_password
 
