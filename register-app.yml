@@ -11,18 +11,6 @@
     # Fixed (Semaphore Environment):    traefik_ip, pihole_url, pihole_password
 
   tasks:
-    - name: Is it an extra-var?
-      ansible.builtin.debug:
-        msg: "pihole_password defined as extra-var: {{ pihole_password is defined }}"
-
-    - name: List env var NAMES only (values not printed)
-      ansible.builtin.shell: "printenv | sed 's/=.*//' | sort"
-      changed_when: false
-      register: envnames
-
-    - ansible.builtin.debug:
-        var: envnames.stdout_lines
-        
     - name: Validate required variables
       ansible.builtin.assert:
         that:
@@ -54,6 +42,11 @@
         status_code: 200
       register: pihole_auth
       no_log: true
+
+    - name: Ensure we actually authenticated
+      ansible.builtin.fail:
+        msg: "Auth step didn't run (check mode / dry run?)."
+      when: pihole_auth.json is not defined
 
     - name: Capture session id
       ansible.builtin.set_fact:
