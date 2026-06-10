@@ -6,10 +6,23 @@
 
   vars:
     traefik_config_dir: /traefik-config   # the bind mount from Phase A1
+    pihole_password: "{{ lookup('env', 'pihole_password') }}"
     # Per-run (Semaphore Survey vars):  service, hostname, backend_url
     # Fixed (Semaphore Environment):    traefik_ip, pihole_url, pihole_password
 
   tasks:
+    - name: Is it an extra-var?
+      ansible.builtin.debug:
+        msg: "pihole_password defined as extra-var: {{ pihole_password is defined }}"
+
+    - name: List env var NAMES only (values not printed)
+      ansible.builtin.shell: "printenv | sed 's/=.*//' | sort"
+      changed_when: false
+      register: envnames
+
+    - ansible.builtin.debug:
+        var: envnames.stdout_lines
+        
     - name: Validate required variables
       ansible.builtin.assert:
         that:
